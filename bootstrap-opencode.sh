@@ -39,6 +39,28 @@ EOF
     fi
 }
 
+install_command_line_tools() {
+    if xcode-select -p >/dev/null 2>&1; then
+        info "Xcode Command Line Tools already available"
+        return
+    fi
+
+    note "Requesting Xcode Command Line Tools (required for GitHub CLI authentication)..."
+    # macOS displays its own installation progress. This command returns before
+    # installation completes, so wait rather than letting the bootstrap fail
+    # later when GitHub CLI configures Git credentials.
+    xcode-select --install >/dev/null 2>&1 || true
+    local wait_cycles=0
+    until xcode-select -p >/dev/null 2>&1; do
+        wait_cycles=$((wait_cycles + 1))
+        if (( wait_cycles % 6 == 0 )); then
+            note "Still waiting for Xcode Command Line Tools to finish..."
+        fi
+        sleep 5
+    done
+    info "Xcode Command Line Tools installed"
+}
+
 install_gh() {
     if command -v gh >/dev/null 2>&1; then
         info "GitHub CLI already available: $(command -v gh)"
@@ -101,6 +123,7 @@ download_dotfiles() {
 }
 
 install_temporary_path
+install_command_line_tools
 install_gh
 install_opencode
 DOTFILES_DIR=""

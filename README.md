@@ -1,7 +1,7 @@
 # mac-bootstrap
 
 A deliberately small, public-safe Stage 1 bootstrap for a new Apple-silicon Mac.
-It installs GitHub CLI and OpenCode, uses interactive GitHub browser authentication
+It installs Xcode Command Line Tools, GitHub CLI, and OpenCode, uses interactive GitHub browser authentication
 to download the private `sjvreddy/dotfiles` archive, and installs its minimal
 OpenCode control plane.
 
