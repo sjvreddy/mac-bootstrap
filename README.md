@@ -17,22 +17,22 @@ release. OpenCode is installed through its official installer.
 
 ## Use on a new Mac
 
-Pin a reviewed commit SHA in an Apple Note, then download and inspect that exact
-revision before running it:
+Download the current `main` script, inspect it, then run it:
 
 ```bash
 mkdir -p ~/Downloads/new-mac-bootstrap
 curl -fL -o ~/Downloads/new-mac-bootstrap/bootstrap-opencode.sh \
-  https://raw.githubusercontent.com/sjvreddy/mac-bootstrap/<COMMIT>/bootstrap-opencode.sh
+  https://raw.githubusercontent.com/sjvreddy/mac-bootstrap/main/bootstrap-opencode.sh
 less ~/Downloads/new-mac-bootstrap/bootstrap-opencode.sh
-bash ~/Downloads/new-mac-bootstrap/bootstrap-opencode.sh
+chmod +x ~/Downloads/new-mac-bootstrap/bootstrap-opencode.sh
+~/Downloads/new-mac-bootstrap/bootstrap-opencode.sh
 ```
 
-Do not use an unreviewed `main` branch with `curl | bash`.
+Review and publish changes to `main` before using this recovery path.
 
 ## Maintenance
 
 The source of truth for `bootstrap-opencode.sh` is currently maintained in the
 private `sjvreddy/dotfiles` repository at `scripts/bootstrap-opencode.sh`. When
-changing it, publish the reviewed identical file here and update the pinned
-commit in the Apple Note.
+changing it, publish the reviewed identical file here before using the
+bootstrap on a new Mac.
