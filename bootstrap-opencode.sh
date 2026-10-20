@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Public-safe Stage 1 bootstrap for a clean Apple-silicon Mac.
-# It installs only GitHub CLI, OpenCode, and the private dotfiles control plane.
+# It installs Command Line Tools, Chrome, GitHub CLI, OpenCode, and the private
+# dotfiles control plane.
 # No credentials are embedded; GitHub access is granted interactively in-browser.
 
 set -euo pipefail
@@ -78,6 +79,76 @@ install_command_line_tools() {
     info "Xcode Command Line Tools installed"
 }
 
+install_chrome() {
+    local chrome_app="/Applications/Google Chrome.app"
+    if [[ -d "$chrome_app" ]]; then
+        info "Google Chrome already available"
+        return
+    fi
+
+    note "Google Chrome is not managed on this Mac; installing it before browser authentication..."
+    local chrome_dmg="$BOOTSTRAP_ROOT/googlechrome.dmg"
+    local chrome_volume
+    curl -fL --retry 3 -o "$chrome_dmg" \
+        "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg"
+    chrome_volume="$(hdiutil attach -nobrowse -readonly "$chrome_dmg" \
+        | sed -n 's/^.*\t\(\/Volumes\/.*\)$/\1/p' \
+        | head -n 1)"
+    [[ -n "$chrome_volume" && -d "$chrome_volume/Google Chrome.app" ]] \
+        || fail "The Google Chrome disk image did not mount as expected."
+
+    sudo ditto "$chrome_volume/Google Chrome.app" "$chrome_app"
+    hdiutil detach "$chrome_volume" >/dev/null
+    codesign --verify --deep --strict "$chrome_app" \
+        || fail "Google Chrome signature verification failed."
+    info "Installed Google Chrome"
+}
+
+set_chrome_as_default_browser() {
+    local chrome_app="/Applications/Google Chrome.app"
+    [[ -d "$chrome_app" ]] || fail "Google Chrome is not installed."
+
+    # Register Chrome before changing LaunchServices handlers. Jamf installs can
+    # complete immediately before this script starts, before registration occurs.
+    local lsregister='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+    [[ -x "$lsregister" ]] && "$lsregister" -f "$chrome_app" >/dev/null
+
+    local helper_source="$BOOTSTRAP_ROOT/set-default-browser.c"
+    local helper_binary="$BOOTSTRAP_ROOT/set-default-browser"
+    cat > "$helper_source" <<'EOF'
+#include <CoreServices/CoreServices.h>
+#include <stdio.h>
+
+static int set_handler(CFStringRef scheme) {
+    OSStatus status = LSSetDefaultHandlerForURLScheme(scheme, CFSTR("com.google.Chrome"));
+    if (status != noErr) {
+        fprintf(stderr, "Could not set the default browser (LaunchServices error %d).\n", (int)status);
+        return 1;
+    }
+    return 0;
+}
+
+int main(void) {
+    OSStatus status = LSSetDefaultRoleHandlerForContentType(
+        CFSTR("public.html"), kLSRolesAll, CFSTR("com.google.Chrome"));
+    if (status != noErr) {
+        fprintf(stderr, "Could not set the default HTML handler (LaunchServices error %d).\n", (int)status);
+        return 1;
+    }
+    return set_handler(CFSTR("http")) || set_handler(CFSTR("https"));
+}
+EOF
+    clang -Wno-deprecated-declarations -framework CoreServices \
+        "$helper_source" -o "$helper_binary"
+    "$helper_binary"
+
+    # Explicitly direct GitHub CLI to Chrome in addition to setting macOS's
+    # global default, so this bootstrap never falls back to Safari.
+    export GH_BROWSER='open -a "Google Chrome"'
+    export BROWSER="$GH_BROWSER"
+    info "Set Google Chrome as the default browser"
+}
+
 install_gh() {
     if command -v gh >/dev/null 2>&1; then
         info "GitHub CLI already available: $(command -v gh)"
@@ -141,6 +212,8 @@ download_dotfiles() {
 
 install_temporary_path
 install_command_line_tools
+install_chrome
+set_chrome_as_default_browser
 install_gh
 install_opencode
 DOTFILES_DIR=""
