@@ -113,34 +113,16 @@ set_chrome_as_default_browser() {
     local lsregister='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
     [[ -x "$lsregister" ]] && "$lsregister" -f "$chrome_app" >/dev/null
 
-    local helper_source="$BOOTSTRAP_ROOT/set-default-browser.c"
-    local helper_binary="$BOOTSTRAP_ROOT/set-default-browser"
-    cat > "$helper_source" <<'EOF'
-#include <CoreServices/CoreServices.h>
-#include <stdio.h>
-
-static int set_handler(CFStringRef scheme) {
-    OSStatus status = LSSetDefaultHandlerForURLScheme(scheme, CFSTR("com.google.Chrome"));
-    if (status != noErr) {
-        fprintf(stderr, "Could not set the default browser (LaunchServices error %d).\n", (int)status);
-        return 1;
-    }
-    return 0;
-}
-
-int main(void) {
-    OSStatus status = LSSetDefaultRoleHandlerForContentType(
-        CFSTR("public.html"), kLSRolesAll, CFSTR("com.google.Chrome"));
-    if (status != noErr) {
-        fprintf(stderr, "Could not set the default HTML handler (LaunchServices error %d).\n", (int)status);
-        return 1;
-    }
-    return set_handler(CFSTR("http")) || set_handler(CFSTR("https"));
-}
-EOF
-    clang -Wno-deprecated-declarations -framework CoreServices \
-        "$helper_source" -o "$helper_binary"
-    "$helper_binary"
+    # Avoid compiling a LaunchServices helper: fresh macOS releases can ship a
+    # Command Line Tools SDK before its linker fully supports that SDK's slices.
+    # These are the same user LaunchServices handlers that macOS consults for
+    # HTTP, HTTPS, and HTML documents.
+    defaults write com.apple.LaunchServices/com.apple.launchservices.secure \
+        LSHandlers -array-add '{LSHandlerURLScheme = http; LSHandlerRoleAll = "com.google.Chrome";}'
+    defaults write com.apple.LaunchServices/com.apple.launchservices.secure \
+        LSHandlers -array-add '{LSHandlerURLScheme = https; LSHandlerRoleAll = "com.google.Chrome";}'
+    defaults write com.apple.LaunchServices/com.apple.launchservices.secure \
+        LSHandlers -array-add '{LSHandlerContentType = "public.html"; LSHandlerRoleAll = "com.google.Chrome";}'
 
     # Explicitly direct GitHub CLI to Chrome in addition to setting macOS's
     # global default, so this bootstrap never falls back to Safari.
