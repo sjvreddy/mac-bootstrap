@@ -45,11 +45,28 @@ install_command_line_tools() {
         return
     fi
 
-    note "Requesting Xcode Command Line Tools (required for GitHub CLI authentication)..."
-    # macOS displays its own installation progress. This command returns before
-    # installation completes, so wait rather than letting the bootstrap fail
-    # later when GitHub CLI configures Git credentials.
-    xcode-select --install >/dev/null 2>&1 || true
+    note "Finding the Xcode Command Line Tools update..."
+    # This marker makes the on-demand CLT package visible to softwareupdate on
+    # clean Macs. Unlike `xcode-select --install`, softwareupdate prints actual
+    # download and installation progress to this terminal.
+    local clt_marker="$BOOTSTRAP_ROOT/.com.apple.dt.CommandLineTools.installondemand.in-progress"
+    local clt_label
+    touch "$clt_marker"
+    clt_label="$( (softwareupdate --list 2>&1 || true) \
+        | sed -n 's/^[[:space:]]*\* Label: \(Command Line Tools.*\)$/\1/p' \
+        | head -n 1)"
+    rm -f "$clt_marker"
+
+    if [[ -n "$clt_label" ]]; then
+        note "Installing $clt_label (macOS may request your administrator password)..."
+        sudo softwareupdate --install "$clt_label" --verbose
+    else
+        # A macOS catalog can occasionally omit the label. Use the supported
+        # fallback and wait rather than allowing the bootstrap to fail later.
+        note "macOS did not expose a Command Line Tools update; requesting it through xcode-select..."
+        xcode-select --install >/dev/null 2>&1 || true
+    fi
+
     local wait_cycles=0
     until xcode-select -p >/dev/null 2>&1; do
         wait_cycles=$((wait_cycles + 1))
